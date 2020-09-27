@@ -30,6 +30,10 @@
 #include "gui/mainbar/mainbar.h"
 #include "gui/statusbar.h"
 
+#include <HTTPClient.h>
+#include <TFT_eFEX.h>
+#include <FS.h>
+
 lv_obj_t *example_app_main_tile = NULL;
 lv_style_t example_app_main_style;
 
@@ -42,12 +46,26 @@ LV_FONT_DECLARE(Ubuntu_72px);
 
 static void exit_example_app_main_event_cb( lv_obj_t * obj, lv_event_t event );
 static void enter_example_app_setup_event_cb( lv_obj_t * obj, lv_event_t event );
+static void refresh_camera_main_event_cb( lv_obj_t * obj, lv_event_t event );
+
+TTGOClass *ttgo1 = TTGOClass::getWatch();
+void loadImg();
+
 void example_app_task( lv_task_t * task );
 
 void example_app_main_setup( uint32_t tile_num ) {
 
     example_app_main_tile = mainbar_get_tile_obj( tile_num );
     lv_style_copy( &example_app_main_style, mainbar_get_style() );
+
+    lv_obj_t * reload_btn = lv_imgbtn_create( example_app_main_tile, NULL);
+    lv_imgbtn_set_src(reload_btn, LV_BTN_STATE_RELEASED, &refresh_32px);
+    lv_imgbtn_set_src(reload_btn, LV_BTN_STATE_PRESSED, &refresh_32px);
+    lv_imgbtn_set_src(reload_btn, LV_BTN_STATE_CHECKED_RELEASED, &refresh_32px);
+    lv_imgbtn_set_src(reload_btn, LV_BTN_STATE_CHECKED_PRESSED, &refresh_32px);
+    lv_obj_add_style(reload_btn, LV_IMGBTN_PART_MAIN, &example_app_main_style );
+    lv_obj_align(reload_btn, example_app_main_tile, LV_ALIGN_IN_TOP_RIGHT, -10 , 10 );
+    lv_obj_set_event_cb( reload_btn, refresh_camera_main_event_cb );
 
     lv_obj_t * exit_btn = lv_imgbtn_create( example_app_main_tile, NULL);
     lv_imgbtn_set_src(exit_btn, LV_BTN_STATE_RELEASED, &exit_32px);
@@ -71,13 +89,20 @@ void example_app_main_setup( uint32_t tile_num ) {
     lv_style_set_text_opa( &example_app_main_style, LV_OBJ_PART_MAIN, LV_OPA_70);
     lv_style_set_text_font( &example_app_main_style, LV_STATE_DEFAULT, &Ubuntu_72px);
     lv_obj_t *app_label = lv_label_create( example_app_main_tile, NULL);
-    lv_label_set_text( app_label, "myapp");
+    lv_label_set_text( app_label, "Camera");
     lv_obj_reset_style_list( app_label, LV_OBJ_PART_MAIN );
     lv_obj_add_style( app_label, LV_OBJ_PART_MAIN, &example_app_main_style );
     lv_obj_align( app_label, example_app_main_tile, LV_ALIGN_CENTER, 0, 0);
-
+    
     // create an task that runs every secound
     _example_app_task = lv_task_create( example_app_task, 1000, LV_TASK_PRIO_MID, NULL );
+}
+
+static void refresh_camera_main_event_cb( lv_obj_t * obj, lv_event_t event ) {
+  switch( event ) {
+          case( LV_EVENT_CLICKED ):       loadImg();
+          break;
+  }
 }
 
 static void enter_example_app_setup_event_cb( lv_obj_t * obj, lv_event_t event ) {
@@ -96,5 +121,28 @@ static void exit_example_app_main_event_cb( lv_obj_t * obj, lv_event_t event ) {
 }
 
 void example_app_task( lv_task_t * task ) {
-    // put your code her
+    // Viene eseguito di continuo
+}
+
+void loadImg() {
+    HTTPClient http;
+    TFT_eFEX fex = TFT_eFEX(ttgo1->tft);
+    String url = "http://192.168.0.10:9999/ugo";
+    String file_name = "/tmp.jpg";
+    fs::File f = SPIFFS.open(file_name, "w");
+    if (f) {
+      http.begin(url);
+      int httpCode = http.GET();
+      Serial.printf("Get Camera...");
+      if (httpCode > 0) {
+        if (httpCode == 200) {
+          http.writeToStream(&f);
+          f.close();
+          //http.end();
+          fex.drawJpeg("/tmp.jpg", 0, 0);
+        }
+      } else {
+        Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      }
+    }
 }
